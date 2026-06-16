@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>タイピングの実験</title>
+<style>
+  body {
+    font-family: sans-serif;
+    background: #f0f0f0;
+    margin: 20px;
+  }
+  .container {
+    width: 720px;
+    margin: 0 auto;
+    background: #ffffff;
+    border: 1px solid #ccc;
+    padding: 16px;
+  }
+  h1 {
+    font-size: 20px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+    font-weight: normal;
+  }
+  #target {
+    border: 1px solid #ccc;
+    padding: 8px;
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 14px;
+  }
+  #input {
+    width: 100%;
+    height: 120px;
+    border: 1px solid #ccc;
+    font-family: monospace;
+    font-size: 14px;
+  }
+  #stats {
+    margin-top: 8px;
+    font-size: 14px;
+  }
+  button {
+    margin-top: 8px;
+    font-size: 12px;
+  }
+  .label {
+    font-size: 12px;
+    color: #555;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Typing BPM Experiment</h1>
+
+  <div class="label">Condition (Silence / 60 BPM / 140 BPM などをメモ):</div>
+  <input type="text" id="condition" style="width:100%; margin-bottom:8px;">
+
+  <div id="target"></div>
+
+  <textarea id="input" placeholder="上のテキストをそのまま入力してください。"></textarea>
+
+  <div id="stats">
+    CPM: <span id="cpm">-</span> /
+    Errors: <span id="errors">-</span> /
+    Error Rate: <span id="errorRate">-</span> %
+    <br>
+    Trial Finished: <span id="finished">No</span>
+  </div>
+
+  <button id="resetBtn">Reset</button>
+  <button id="downloadBtn">Download JSON Log</button>
+</div>
+
+<script>
+  // 固定テキスト（約200文字程度に調整して使う）
+  const targetText =
+`for (let i = 0; i < 10; i++) {
+  console.log("Typing BPM experiment: 60 vs 140 BPM, silence, and error rate.");
+}`;
+
+  const targetEl = document.getElementById('target');
+  const inputEl = document.getElementById('input');
+  const cpmEl = document.getElementById('cpm');
+  const errorsEl = document.getElementById('errors');
+  const errorRateEl = document.getElementById('errorRate');
+  const finishedEl = document.getElementById('finished');
+  const resetBtn = document.getElementById('resetBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const conditionEl = document.getElementById('condition');
+
+  targetEl.textContent = targetText;
+
+  let startTime = null;
+  let endTime = null;
+  let keystrokeLog = []; // {time, index, char, expected, correct}
+
+  function resetAll() {
+    inputEl.value = '';
+    startTime = null;
+    endTime = null;
+    keystrokeLog = [];
+    cpmEl.textContent = '-';
+    errorsEl.textContent = '-';
+    errorRateEl.textContent = '-';
+    finishedEl.textContent = 'No';
+  }
+
+  function updateStats() {
+    if (!startTime) return;
+    const now = endTime || performance.now();
+    const elapsedMs = now - startTime;
+    const elapsedMin = elapsedMs / 60000;
+
+    const typed = inputEl.value;
+    const len = typed.length;
+    const cpm = elapsedMin > 0 ? (len / elapsedMin) : 0;
+
+    let errors = 0;
+    for (let i = 0; i < len; i++) {
+      if (typed[i] !== targetText[i]) {
+        errors++;
+      }
+    }
+    const errorRate = len > 0 ? (errors / len) * 100 : 0;
+
+    cpmEl.textContent = cpm.toFixed(2);
+    errorsEl.textContent = errors;
+    errorRateEl.textContent = errorRate.toFixed(2);
+  }
+
+  inputEl.addEventListener('input', (e) => {
+    const typed = inputEl.value;
+
+    // 計測開始
+    if (!startTime && typed.length > 0) {
+      startTime = performance.now();
+    }
+
+    const idx = typed.length - 1;
+    const time = performance.now();
+    const char = typed[idx] || '';
+    const expected = targetText[idx] || '';
+    const correct = char === expected;
+
+    keystrokeLog.push({
+      time: time,
+      offsetMs: startTime ? time - startTime : 0,
+      index: idx,
+      char: char,
+      expected: expected,
+      correct: correct
+    });
+
+    // 終了判定（ターゲットと同じ長さになったら終了）
+    if (typed.length >= targetText.length) {
+      endTime = performance.now();
+      finishedEl.textContent = 'Yes';
+      inputEl.disabled = true;
+    }
+
+    updateStats();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    inputEl.disabled = false;
+    resetAll();
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    const data = {
+      condition: conditionEl.value,
+      targetText: targetText,
+      typedText: inputEl.value,
+      startTime: startTime,
+      endTime: endTime,
+      keystrokes: keystrokeLog
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const cond = conditionEl.value || 'no_condition';
+    a.href = url;
+    a.download = `typing_log_${cond}_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  resetAll();
+</script>
+</body>
+</html>
